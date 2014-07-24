@@ -1,0 +1,6 @@
+.vagrant/
+*.swp
+.ropeproject/
+*.jar
+*.class
+bin/
