@@ -1,9 +1,12 @@
 DEPS = $(shell go list -f '{{range .TestImports}}{{.}} {{end}}' ./...)
 PACKAGES = $(shell go list ./...)
 
-all: deps format
+all: deps format lint
 	@mkdir -p bin/
 	@bash --norc -i ./scripts/build.sh
+
+check: deps format lint vet
+
 deps:
 	@echo "--> Installing build dependencies"
 	@go get -d -v ./...
@@ -12,6 +15,14 @@ deps:
 format: deps
 	@echo "--> Running go fmt"
 	@go fmt $(PACKAGES)
+
+lint: deps
+	@echo "--> Running golint"
+	@golint *.go 
+
+vet: deps
+	@echo "--> Running go vet"
+	@go vet *.go 
 
 jvmbuild:
 	@mkdir -p tests/java/bin
