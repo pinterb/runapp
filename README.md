@@ -22,6 +22,9 @@ by creating a wrapper command line script.  The approach this wrapper takes is f
 
 ### Example
 
+```bash
+make
+```
 ```java
 bin/runapp java -jar tests/java/bin/hello.jar --env_prefix=MY_APP_ --db_user=bart
 ```
