@@ -35,4 +35,5 @@ bin/runapp java -jar tests/java/bin/hello.jar --env_prefix=MY_APP_ --db_user=bar
 This is a bit simplistic and there may be ways to pre-configure your application to run (e.g create a .runapp config file with supported flags) more intelligently.
 * Give some thought to creating sub-commands around known languages (e.g. java, ruby, python).  For example, this might be useful for java as something like *-XX:MaxPermSize* is currently not handled as you'd expect (you need to specify XX:MaxPermSize as your variable name).  In fact, these type of java options may only work from the command line as all environment and config file variables are created as long flags (e.g "--").
 * With Docker containers becoming popular, more and more configuration will be available via solutions like [etcd](https://github.com/coreos/etcd) or perhaps [consul](http://www.consul.io/).  This application should identify a way to support these types of configuation sources.
-* Tests and vendoring.
+* Tests and cross-compiling.
+* Vendoring.
