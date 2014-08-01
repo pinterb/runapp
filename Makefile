@@ -1,9 +1,12 @@
 DEPS = $(shell go list -f '{{range .TestImports}}{{.}} {{end}}' ./...)
 PACKAGES = $(shell go list ./...)
 
-all: deps format lint
+all: build format lint jvmbuild
+
+build: deps
 	@mkdir -p bin/
 	@bash --norc -i ./scripts/build.sh
+	@cp .env bin/
 
 check: deps format lint vet
 

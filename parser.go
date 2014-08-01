@@ -11,17 +11,10 @@ import (
 
 // A Flagette represents the state of a flag. It was pulled from https://github.com/spf13/pflag/blob/master/flag.go
 type Flagette struct {
+	sequence   int    // this struct needs to be sortable
 	name       string // name as it appears on command line
 	assignOper string // assignment operator
 	value      string // value as set
-}
-
-// Value is the interface to the dynamic value stored in a flag.
-// (The default value is represented as a string.)
-type Value interface {
-	String() string
-	Set(string) error
-	Type() string
 }
 
 // Options for defining location of configuration file and/or environment variables prefix
@@ -30,6 +23,16 @@ type Options struct {
 	OverrideWithConfigVars bool   // override any existing Flagette's matching config file variable
 	EnvPrefixFlagName      string // the flag used to specify the application prefix used to identify environment variables
 	OverrideWithEnvVars    bool   // override any existing Flagette's matching environment variable
+}
+
+// SetSequence will set the sequence of the flagette.
+func (f *Flagette) SetSequence(seq int) {
+	f.sequence = seq
+}
+
+// Sequence will return the sequence of the flagette.
+func (f Flagette) Sequence() int {
+	return f.sequence
 }
 
 // SetName will set the name of the flagette.
@@ -44,7 +47,6 @@ func (f Flagette) Name() string {
 
 // SetAssignOper will set the assignment operator of the flagette.
 func (f *Flagette) SetAssignOper(value string) {
-	fmt.Printf("Setting Flag AssignOper: %s\n", value)
 	f.assignOper = value
 }
 
@@ -60,7 +62,6 @@ func (f Flagette) HasEqualAssignmentOper() bool {
 
 // SetValue will set the value of the flagette.
 func (f *Flagette) SetValue(value string) {
-	fmt.Printf("Setting Flag Value: %s\n", value)
 	f.value = value
 }
 
@@ -79,11 +80,28 @@ func (f Flagette) Emit() string {
 	return f.name + f.assignOper + f.value
 }
 
+// This type is used for sorting Flagette's
+type flagetteSlice []*Flagette
+
+// Len is part of sort.Interface
+func (f flagetteSlice) Len() int {
+	return len(f)
+}
+
+// Swap is part of sort.Interface
+func (f flagetteSlice) Swap(i, j int) {
+	f[i], f[j] = f[j], f[i]
+}
+
+// Less is part of sort.Interface. We sort on Flagette's sequence value.
+func (f flagetteSlice) Less(i, j int) bool {
+	return f[i].Sequence() < f[j].Sequence()
+}
+
 // Parse will take some command line arguments and parse them out into a struct that we can work with.
 func Parse(opts *Options, args []string) (c string, f map[string]*Flagette, e error) {
-	fmt.Println(fmt.Sprintf("ParseArgs: %s", "Starting..."))
 
-	// Define our return values
+	// define our return values
 	var command string
 	var newArgs map[string]*Flagette
 	var err error
@@ -112,35 +130,30 @@ func Parse(opts *Options, args []string) (c string, f map[string]*Flagette, e er
 		newArgs, err = parseCommandLineArgs(args)
 	}
 
-	fmt.Println("")
-	fmt.Println("Flagettes: after command line parse")
-	for key, value := range newArgs {
-		fmt.Println("Key:", key, " --> Name:", value.Name(), "AssignOper:", value.AssignOper(), "Value:", value.Value(), " (", value.Emit(), ")")
+	err = parseEnvVars(opts, newArgs)
+	if err != nil {
+		fmt.Println("Flagettes: back from env vars parse. But recieved error: ", err)
 	}
 
-	newArgs, err = parseEnvVars(opts, newArgs)
-
-	fmt.Println("")
-	fmt.Println("Flagettes: after env vars parse")
-	for key, value := range newArgs {
-		fmt.Println("Key:", key, " --> Name:", value.Name(), "AssignOper:", value.AssignOper(), "Value:", value.Value(), " (", value.Emit(), ")")
+	err = parseConfigFileVars(opts, newArgs)
+	if err != nil {
+		fmt.Println("Flagettes: back from config file parse. But recieved error: ", err)
 	}
 
-	fmt.Println(fmt.Sprintf("ParseArgs: %s", "Ending..."))
 	return command, newArgs, err
 }
 
 // Parse command line arguments passed in by the user.
 func parseCommandLineArgs(args []string) (f map[string]*Flagette, e error) {
-	fmt.Println(fmt.Sprintf("parseCommandLineArgs: %s", "Starting..."))
 
-	// Define our return values
+	// define our return values
 	var newArgs map[string]*Flagette
 	var err error
 
+	// define our counter
+	counter := 0
+
 	if len(args) > 0 {
-		//	first := args[0]
-		//	args = args[1:]
 		newArgs = make(map[string]*Flagette)
 
 		// some variable initialization
@@ -149,13 +162,7 @@ func parseCommandLineArgs(args []string) (f map[string]*Flagette, e error) {
 
 		for _, arg := range args {
 
-			fmt.Println("")
-			fmt.Println("")
-			fmt.Printf("Current Flag: %s\n", currentFlg.Name())
-			fmt.Printf("Current Flag Value: %s\n", currentFlg.Value())
-
 			if strings.HasPrefix(arg, "--") {
-				fmt.Printf("We have a long flag: %s\n", arg)
 				currentFlg = new(Flagette)
 				strippedLong := strings.TrimPrefix(arg, "--")
 				var lMapKey string
@@ -171,10 +178,11 @@ func parseCommandLineArgs(args []string) (f map[string]*Flagette, e error) {
 					currentFlg.SetAssignOper(" ")
 				}
 
+				counter++
+				currentFlg.SetSequence(counter)
 				newArgs[lMapKey] = currentFlg
 
 			} else if strings.HasPrefix(arg, "-") {
-				fmt.Printf("We have a short flag: %s\n", arg)
 				currentFlg = new(Flagette)
 				strippedShort := strings.TrimPrefix(arg, "-")
 				var sMapKey string
@@ -190,10 +198,11 @@ func parseCommandLineArgs(args []string) (f map[string]*Flagette, e error) {
 					currentFlg.SetAssignOper(" ")
 				}
 
+				counter++
+				currentFlg.SetSequence(counter)
 				newArgs[sMapKey] = currentFlg
 
 			} else if currentFlg.Name() != "" && !currentFlg.HasValue() {
-				fmt.Printf("We have a a value: %s\n", arg)
 				currentFlg.SetValue(arg)
 
 			} else {
@@ -202,58 +211,49 @@ func parseCommandLineArgs(args []string) (f map[string]*Flagette, e error) {
 		}
 	}
 
-	fmt.Println(fmt.Sprintf("parseCommandLineArgs: %s", "Ending..."))
 	return newArgs, err
 }
 
 // Parse any environment variables found matching application prefix.
-func parseEnvVars(opts *Options, flagettes map[string]*Flagette) (f map[string]*Flagette, err error) {
-	fmt.Println(fmt.Sprintf("parseEnvVars: %s", "Starting..."))
+func parseEnvVars(opts *Options, flagettes map[string]*Flagette) (e error) {
 	if opts.EnvPrefixFlagName != "" {
 		if appKeyFlagette, ok := flagettes[opts.EnvPrefixFlagName]; ok {
 			envVars, err := loadEnvVars()
-			if err == nil {
-				appKey := strings.ToUpper(appKeyFlagette.Value())
-				delete(flagettes, opts.EnvPrefixFlagName)
-				if !strings.HasSuffix(appKey, "_") {
-					appKey += "_"
-				}
-				for envKey, envValue := range envVars {
-					if strings.HasPrefix(envKey, appKey) {
-						lookupKey := strings.ToLower(strings.TrimPrefix(envKey, appKey))
-						fmt.Println("LookupKEY ", lookupKey)
-						if _, ok := flagettes[lookupKey]; ok {
-							if !opts.OverrideWithEnvVars {
-								fmt.Println(lookupKey, ": Was already entered at the command line")
-								continue
-							}
+			if err != nil {
+				return err
+			}
+			counter := len(flagettes)
+			appKey := strings.ToUpper(appKeyFlagette.Value())
+			delete(flagettes, opts.EnvPrefixFlagName)
+			if !strings.HasSuffix(appKey, "_") {
+				appKey += "_"
+			}
+			for envKey, envValue := range envVars {
+				if strings.HasPrefix(envKey, appKey) {
+					lookupKey := strings.ToLower(strings.TrimPrefix(envKey, appKey))
+					if _, ok := flagettes[lookupKey]; ok {
+						if !opts.OverrideWithEnvVars {
+							continue
 						}
-						fmt.Println("Putting ", lookupKey)
-						flagettes[lookupKey] = &Flagette{
-							name:       "--" + lookupKey,
-							assignOper: "=",
-							value:      envValue,
-						}
+					}
+
+					counter++
+					flagettes[lookupKey] = &Flagette{
+						name:       "--" + lookupKey,
+						assignOper: "=",
+						value:      envValue,
+						sequence:   counter,
 					}
 				}
 			}
 		}
 	}
 
-	fmt.Println(fmt.Sprintf("parseEnvVars: %s", "Ending..."))
-
-	fmt.Println("")
-	fmt.Println("Flagettes: after env var parse")
-	for key, value := range flagettes {
-		fmt.Println("Key:", key, " --> Name:", value.Name(), "AssignOper:", value.AssignOper(), "Value:", value.Value(), " (", value.Emit(), ")")
-	}
-
-	return flagettes, nil
+	return nil
 }
 
 // Load all environment variables.  See https://coderwall.com/p/kjuyqw
 func loadEnvVars() (env map[string]string, err error) {
-	fmt.Println(fmt.Sprintf("loadEnvVars: %s", "Starting..."))
 
 	getenvironment := func(data []string, getkeyval func(item string) (key, val string)) map[string]string {
 		items := make(map[string]string)
@@ -271,26 +271,52 @@ func loadEnvVars() (env map[string]string, err error) {
 		return
 	})
 
-	//fmt.Println(environment["PATH"])
-
-	fmt.Println(fmt.Sprintf("loadEnvVars: %s", "Ending..."))
-
-	/* for key, value := range environment {
-		fmt.Println("Key:", key, "Value:", value)
-	} */
 	return environment, nil
 }
 
-//  Load any config file variables.
-func loadConfigFileVars(opts *Options, flagettes map[string]*Flagette) (err error) {
-	fmt.Println(fmt.Sprintf("loadConfigFileVars: %s", "Starting..."))
-	fmt.Println(fmt.Sprintf("loadConfigFileVars: %s", "Ending..."))
-	return nil
+// Parse any config file variables.
+func parseConfigFileVars(opts *Options, flagettes map[string]*Flagette) (e error) {
+	config, err := readConfig(opts)
+	if err != nil {
+		if strings.Contains(err.Error(), "no such file or directory") {
+			return nil
+		}
+		return err
+	}
+
+	counter := len(flagettes)
+	// ini files can have sections.
+	for configSection, configDetails := range config {
+		// inside a section
+		for configName, configValue := range configDetails {
+
+			lookupKey := strings.ToLower(configName)
+			if len(configSection) > 0 {
+				lookupKey = strings.ToLower(configSection + "_" + configName)
+			}
+
+			if _, ok := flagettes[lookupKey]; ok {
+				if !opts.OverrideWithConfigVars {
+					continue
+				}
+			}
+
+			counter++
+			flagettes[lookupKey] = &Flagette{
+				name:       "--" + lookupKey,
+				assignOper: "=",
+				value:      configValue,
+				sequence:   counter,
+			}
+
+		}
+	}
+
+	return err
 }
 
 // Load configuration file
-func readConfig(opts *Options) (d *ini.Dict, err error) {
-	fmt.Println(fmt.Sprintf("loadConfig: %s", "Starting..."))
+func readConfig(opts *Options) (d ini.Dict, err error) {
 	var dict ini.Dict
 	if opts.ConfigFilename != "" {
 		dict, err = ini.Load(opts.ConfigFilename)
@@ -300,6 +326,5 @@ func readConfig(opts *Options) (d *ini.Dict, err error) {
 	} else {
 		dict = make(ini.Dict, 0)
 	}
-	fmt.Println(fmt.Sprintf("loadConfig: %s", "Ending..."))
-	return &dict, nil
+	return dict, nil
 }
